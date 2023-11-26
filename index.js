@@ -192,7 +192,7 @@ async function run() {
     // })
 
     app.post('/servay', verifyToken, async (req, res) => {
-      const { like, dislike, yesVoted, notVoted, ...surveyData } = req.body;
+      const { like, dislike, yesVoted, notVoted, status, ...surveyData } = req.body;
 
       const timestamp = moment().format('MMMM Do YYYY, h:mm:ss a') // Generate timestamp
 
@@ -203,7 +203,8 @@ async function run() {
         dislike: dislike || 0,
         yesVoted: yesVoted || 0,
         notVoted: notVoted || 0,
-        timestamp
+        timestamp,
+        status: "pending"
       };
 
       try {
@@ -213,34 +214,48 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
+    //  servay page  data show
     app.get('/servay', async (req, res) => {
+      const result = await servayCollectoin.find({ status: "Published" }).toArray()
+      // const result = await servayCollectoin.find().toArray()
+      res.send(result)
+    })
+
+
+    // servay admin data get  page 
+    app.get('/servayAdmin', async (req, res) => {
+
       const result = await servayCollectoin.find().toArray()
       res.send(result)
     })
-    // update work
-    /* get data for spesific id data */
-    app.get('/servay/:id', async (req, res) => {
-      const id = req.params.id
-      const query = { _id: new ObjectId(id) }
-      const result = await servayCollectoin.findOne(query)
-      // console.log('fecth data ', result);
-      res.send(result)
-    })
-    // app.patch('/servay/:id', async (req, res) => {
-    //   const item = req.body
-    //   const id = req.params.id
-    //   const filter = { _id: new ObjectId(id) }
-    //   const updatedDoc = {
-    //     $set: {
-    //       eamil: item.eamil,
-    //       category: item.category,
-    //       titale: item.titale,
-    //       Descriptoin: item.Descriptoin,
-    //     }
-    //   }
-    //   const result = await servayCollectoin.updateOne(filter, updatedDoc)
-    //   res.send(result)
-    // })
+
+
+    // admin update servay Unpublised
+    // PUT METHOD
+    app.put('/servayAdmin/:id', verifyToken, async (req, res) =>{
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          message: req.body.enteredMessage,
+          status: req.body.status,
+        },
+      }
+      const result = await servayCollectoin.updateOne(query, updatedDoc); res.status(200).send(result);
+    });
+    
+    // pacth Published for data 
+    app.patch('/servayAdmin/:id', verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          status: req.body.status,
+        },
+      }
+      const result = await servayCollectoin.updateOne(query, updatedDoc);
+      res.status(200).send(result);
+    });
 
 
 

@@ -6,7 +6,8 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const cors = require('cors');
 const moment = require('moment/moment');
 const port = process.env.PORT || 5000;
-
+// This is your test secret API key.
+const stripe = require("stripe")('sk_test_51OEuuJKc6cWjkGN6wac43QFhEVjHVFMsyAYKltjlSA46ShnBVWz9Z3bsrxuZ9B6KWblR3cxO0aeeWRhO4ZES0X2E00sG3FUQ29');
 app.use(express.static("public"));
 app.use(express.json());
 
@@ -37,7 +38,10 @@ async function run() {
     // await client.connect();
 
     const userCollectoin = client.db("srevay").collection("users");
+    const paymentCOllectoin = client.db("srevay").collection("payment");
     const servayCollectoin = client.db("srevay").collection("AllServays");
+    const commentCollection = client.db("srevay").collection("commentCollection");
+
 
     // jwt api 
     app.post('/jwt', async (req, res) => {
@@ -191,7 +195,7 @@ async function run() {
     //   res.send(result)
     // })
 
-    app.post('/servay', verifyToken, async (req, res) => {
+    app.post('/servay', verifyToken, verifyServey, async (req, res) => {
       const { like, dislike, yesVoted, notVoted, status, ...surveyData } = req.body;
 
       const timestamp = moment().format('MMMM Do YYYY, h:mm:ss a') // Generate timestamp
@@ -214,16 +218,74 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
+
+
+    /* servey like dislike  */
+
+    app.patch('/allSurvey/like/:id', verifyToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const { like } = req.body;
+        const updatedDoc = {
+          $set: {
+            like: like
+
+          }
+        };
+        const result = await servayCollectoin.updateOne(filter, updatedDoc);
+        if (result.modifiedCount > 0) {
+        }
+        res.send({ success: true, modifiedCount: result.modifiedCount });
+      } catch (error) {
+        res.status(500).json({ success: false, message: "internal server error" });
+      }
+
+    });
+   
+
+    app.patch('/allSurvey/dislike/:id', verifyToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const { dislike } = req.body;
+        const updatedDoc = {
+          $set: {
+            dislike: dislike
+          }
+        };
+        const result = await servayCollectoin.updateOne(filter, updatedDoc);
+        if (result.modifiedCount > 0) {
+          res.send({ success: true, modifiedCount: result.modifiedCount });
+        } else {
+          res.send({ success: false, modifiedCount: 0 });
+        }
+      } catch (error) {
+        res.status(500).json({ success: false, message: "internal server error" });
+      }
+    });
+
+
     //  servay page  data show
     app.get('/servay', async (req, res) => {
-      const result = await servayCollectoin.find({ status: "Published" }).toArray()
+
+
+      const result = await servayCollectoin.find({ status: "Published", }).toArray()
+      // const result = await servayCollectoin.find().toArray()
+      res.send(result)
+    })
+    // servay spesific id data 
+    app.get('/servay/:id', async (req, res) => {
+      const id = req.params.id
+      const query = { _id: new ObjectId(id) }
+      const result = await servayCollectoin.find(query).toArray()
       // const result = await servayCollectoin.find().toArray()
       res.send(result)
     })
 
 
     // servay admin data get  page 
-    app.get('/servayAdmin', async (req, res) => {
+    app.get('/servayAdmin', verifyToken, verifyAdmin, async (req, res) => {
 
       const result = await servayCollectoin.find().toArray()
       res.send(result)
@@ -232,7 +294,7 @@ async function run() {
 
     // admin update servay Unpublised
     // PUT METHOD
-    app.put('/servayAdmin/:id', verifyToken, async (req, res) =>{
+    app.put('/servayAdmin/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const updatedDoc = {
@@ -243,9 +305,9 @@ async function run() {
       }
       const result = await servayCollectoin.updateOne(query, updatedDoc); res.status(200).send(result);
     });
-    
+
     // pacth Published for data 
-    app.patch('/servayAdmin/:id', verifyToken, async (req, res) => {
+    app.patch('/servayAdmin/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const updatedDoc = {
@@ -257,6 +319,110 @@ async function run() {
       res.status(200).send(result);
     });
 
+
+
+
+
+
+
+
+
+    /* spesific servay show his servay data  */
+
+
+
+    app.get('/myServay', async (req, res) => {
+      let query = {}
+      if (req.query?.email) {
+        query = { email: req.query.email }
+      }
+      const result = await servayCollectoin.find(query).toArray()
+      res.send(result)
+    })
+
+
+
+
+
+    /* payment getWay intent  intent  */
+    app.post('/create-payment-intent', async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100); // Convert to cents
+
+      try {
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: 'usd',
+          payment_method_types: ['card'],
+        });
+
+        console.log(amount, "amount inside");
+        res.send({
+          clientSecret: paymentIntent.client_secret,
+        });
+      } catch (error) {
+        console.error('Error creating payment intent:', error.message);
+        res.status(500).json({ error: 'Failed to create payment intent' });
+      }
+    });
+
+
+
+
+
+
+
+
+    /* payment history */
+    app.post('/payments', async (req, res) => {
+      const payment = req.body;
+      const paymentResult = await paymentCOllectoin.insertOne(payment);
+      console.log("Payment info", payment);
+      const userEmail = payment.eamil;
+      console.log(userEmail);
+      try {
+        // Update the users role to Pro User  successful payment
+        const filter = { email: userEmail };
+        const updateDoc = {
+          $set: {
+            role: 'Pro User'
+          }
+        };
+        const result = await userCollectoin.updateOne(filter, updateDoc);
+        console.log(result);
+        res.send(paymentResult);
+      } catch (error) {
+        console.error('Error updating user role:', error.message);
+        res.status(500).json({ error: 'Failed to update user role' });
+      }
+    });
+
+
+
+
+
+
+
+
+
+    /* all users  payment history for admin  */
+
+    app.get('/paymentsHistory', verifyToken, verifyAdmin, async (req, res) => {
+      const result = await paymentCOllectoin.find().toArray()
+      res.send(result)
+    })
+
+
+
+
+
+
+/* servey comment and */
+    app.post('/addComment', async (req, res) => {
+      const newComment = req.body
+      const result = await commentCollection.insertOne(newComment)
+      res.send(result)
+})
 
 
 

@@ -1,13 +1,15 @@
-const express = require('express')
+const express = require('express');
 const app = express()
 const jwt = require('jsonwebtoken')
-require('dotenv').config
+require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const cors = require('cors');
 const moment = require('moment/moment');
 const port = process.env.PORT || 5000;
 // This is your test secret API key.
-const stripe = require("stripe")('sk_test_51OEuuJKc6cWjkGN6wac43QFhEVjHVFMsyAYKltjlSA46ShnBVWz9Z3bsrxuZ9B6KWblR3cxO0aeeWRhO4ZES0X2E00sG3FUQ29');
+// const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+console.log(process.env.STRIPE_SECRET_KEY);
 app.use(express.static("public"));
 app.use(express.json());
 
@@ -19,9 +21,11 @@ app.use(express.json())
 
 
 
+// const uri = "mongodb+srv://<username>:<password>@cluster0.bkdyuro.mongodb.net/?retryWrites=true&w=majority";
 
-
-const uri = "mongodb+srv://Assaignment-12:99tHk2R9LeshkPgl@cluster0.bkdyuro.mongodb.net/?retryWrites=true&w=majority";
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.bkdyuro.mongodb.net/?retryWrites=true&w=majority`
+// console.log({process.env.DB_USER});
+// console.log(${process.env.DB_PASS});
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -40,16 +44,17 @@ async function run() {
     const userCollectoin = client.db("srevay").collection("users");
     const paymentCOllectoin = client.db("srevay").collection("payment");
     const servayCollectoin = client.db("srevay").collection("AllServays");
+    const pollCollectoin = client.db("srevay").collection("pollCollectoin");
     const commentCollection = client.db("srevay").collection("commentCollection");
 
 
     // jwt api 
     app.post('/jwt', async (req, res) => {
       const user = req.body
-      const token = jwt.sign(user, "d547bc644dfb8fa06eb6a24690665052c47aaaf0986f667542dc78208cedfe1334cabd2200107ad7923846a499535a4bdfcd6b1d1cb4dace3e17a22147f6b899", { expiresIn: "365h" })
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "365h" })
       res.send({ token })
     })
-
+    console.log(process.env.ACCESS_TOKEN_SECRET);
     //  middale wares  verify token
     const verifyToken = (req, res, next) => {
       // console.log('inside veryfied token ', req.headers.authorizatoin);
@@ -58,7 +63,7 @@ async function run() {
         return res.status(401).send({ massage: "forbidden access" })
       }
       const token = req.headers.authorizatoin.split(' ')[1]
-      jwt.verify(token, "d547bc644dfb8fa06eb6a24690665052c47aaaf0986f667542dc78208cedfe1334cabd2200107ad7923846a499535a4bdfcd6b1d1cb4dace3e17a22147f6b899", (err, decoded) => {
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
         // console.log("verify", decoded);
         if (err) {
           return res.status(401).send({ massage: "forbiden accsess" })
@@ -97,8 +102,14 @@ async function run() {
 
     //  users relted api
 
-    app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
-      const result = await userCollectoin.find().toArray()
+    app.get('/users', async (req, res) => {
+      const filter = req.query.filter
+      console.log("filtermethod", filter);
+      let query = {}
+      if (filter) {
+        query = { role: filter }
+      }
+      const result = await userCollectoin.find(query).toArray()
       res.send(result)
     })
 
@@ -397,7 +408,7 @@ async function run() {
 
 
     /* payment history */
-    app.post('/payments', async (req, res) => {
+    app.post('/payments', verifyToken, async (req, res) => {
       const payment = req.body;
       const paymentResult = await paymentCOllectoin.insertOne(payment);
       console.log("Payment info", payment);
@@ -443,9 +454,16 @@ async function run() {
     /* servey comment and */
     app.post('/addComment', async (req, res) => {
       const newComment = req.body
-      const result = await commentCollection.insertOne(newComment)
+      const result = await pollCollectoin.insertOne(newComment)
       res.send(result)
     })
+
+    app.post('/addComments', async (req, res) => {
+      const newComments = req.body
+      const result = await commentCollection.insertOne(newComments)
+      res.send(result)
+    })
+
 
 
 
@@ -459,14 +477,15 @@ async function run() {
     /* agregrate for response iteam */
 
     app.get('/responseItem', async (request, response) => {
-      const result = await surveyCollection
+      const result = await servayCollectoin
         .aggregate([
-          { $unwind: '$testId' },
+          { $unwind: { path: '$_id', preserveNullAndEmptyArrays: true } },
+          { $addFields: { testIdString: { $toString: '$_id' } } },
           {
             $lookup: {
-              from: 'visitedSurvey',
-              localField: 'testId',
-              foreignField: 'surveyItemId',
+              from: 'pollCollectoin',
+              localField: 'testIdString',
+              foreignField: 'surveyId',
               as: 'responseData',
             }
           },
@@ -474,35 +493,42 @@ async function run() {
           {
             $group: {
               _id: {
-                userName: '$responseData.userName',
-                userEmail: '$responseData.userEmail',
-                timestamp: '$responseData.timestamp'
+                name: "$responseData.name",
+                email: "$responseData.email",
+                question: '$responseData.question',
+                report: '$responseData.report',
+                surveyId: '$responseData.surveyId'
               },
-              totalYesVotes: {
+
+              totalvotes: {
                 $sum: {
                   $cond: {
-                    if: { $eq: ['$responseData.vote', 'yes'] },
+                    if: {
+                      $eq: ['$responseData.vote', 'yes']
+                    },
                     then: 1,
                     else: 0,
+
                   }
                 }
               }
             }
           },
           {
-
             $group: {
-              _id: null,
-              totalYesVotes: { $sum: '$totalYesVotes' },
-              details: { $push: '$_id' },
-
-            },
-          },
+              _id: "null",
+              totalvotes: { $sum: '$totalvotes' },
+              details: { $push: "$_id" },
+            }
+          }
 
         ]).toArray();
-      const detailedInformation = result.length > 0 ? result[0].details : [];
-      const totalYesVotes = result.length > 0 ? result[0].totalYesVotes : 0;
-      response.status(200).send({ detailedInformation, totalYesVotes });
+
+      const detailInformatoin = result.length > 0 ? result[0].details : [];
+      const totalVotes = result.length > 0 ? result[0].totalVotes : 0
+
+
+      response.send({ detailInformatoin, totalVotes });
     })
 
 
@@ -515,7 +541,7 @@ async function run() {
     app.get('/surveyorResponse/:email', async (request, response) => {
       const email = request.params.email;
       const query = { surveyorEmail: email };
-      const resultTwo = await surveyCollection
+      const resultTwo = await servayCollectoin
         .aggregate([
 
           {
@@ -528,9 +554,9 @@ async function run() {
           },
           {
             $lookup: {
-              from: 'visitedSurvey',
+              from: 'pollCollectoin',
               localField: 'covertString',
-              foreignField: 'surveyItemId',
+              foreignField: 'surveyId',
               as: 'resData',
 
             },
@@ -542,11 +568,11 @@ async function run() {
           {
             $group: {
               _id: {
-                surveyItemId: '$resData.surveyItemId',
-                userName: '$resData.userName',
-                userEmail: '$resData.userEmail',
+                surveyId: '$resData.surveyId',
+                name: '$resData.name',
+                email: '$resData.email',
                 timestamp: '$resData.timestamp',
-                totalVotes: {
+                totalvotes: {
                   $sum: {
                     $cond: {
                       if: { $eq: ['$resData.vote', 'yes'] },
@@ -559,8 +585,8 @@ async function run() {
             }
           }, {
             $group: {
-              _id: '$_id.surveyItemId',
-              totalVotesPerItem: { $sum: '$totalVotes' },
+              _id: '$_id.surveyId',
+              totalVotesPerItem: { $sum: '$totalvotes' },
               info: { $push: '$_id' },
             }
           }
@@ -582,8 +608,8 @@ async function run() {
 
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();

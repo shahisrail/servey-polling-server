@@ -116,9 +116,10 @@ async function run() {
 
     app.post('/users', async (req, res) => {
       const user = req.body
+
       // insert email if user donent exists :
       // you can do this many ways (1.email unique , 2: upsert 3.simple checking)
-      const query = { email: user.email }
+      const query = { email: user.email, role: user.role }
       const exsitingUser = await userCollectoin.findOne(query)
       if (exsitingUser) {
         return res.send({ massage: 'user already exists', insertedId: null })
@@ -450,10 +451,34 @@ async function run() {
 
 
 
+    app.get('/user-data', async (req, res, next) => {
+      try {
+        const email = req.query.email;
 
+        // Find all documents in pollCollection where the email is included
+        const users = await pollCollectoin.find({ email: email }).toArray();
+
+        if (!users || users.length === 0) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Return the user data
+        res.status(200).json(users);
+      } catch (error) {
+        next(error);
+        res.status(500).json({ message: 'Internal Server error' }); // Corrected the closing bracket for json method
+      }
+    }); // Corrected the closing bracket for the endpoint
+          
+          
     /* servey comment and */
     app.post('/addComment', async (req, res) => {
       const newComment = req.body
+      const id = req.query.id
+      const servay = await servayCollectoin.updateOne({ _id: new ObjectId(id) },
+        { $inc: { yesVoted: 1 } })
+      console.log(id);
+      console.log(servay);
       const result = await pollCollectoin.insertOne(newComment)
       res.send(result)
     })
@@ -462,6 +487,7 @@ async function run() {
       const newComments = req.body
       const result = await commentCollection.insertOne(newComments)
       res.send(result)
+
     })
 
 
@@ -476,127 +502,249 @@ async function run() {
 
     /* agregrate for response iteam */
 
+    // app.get('/responseItem', async (request, response) => {
+    //   const result = await servayCollectoin
+    //     .aggregate([
+    // { $unwind: { path: '$_id', preserveNullAndEmptyArrays: true } },
+    // { $addFields: { testIdString: { $toString: '$_id' } } },
+    // {
+    //   $lookup: {
+    //     from: 'pollCollectoin',
+    //     localField: 'testIdString',
+    //     foreignField: 'surveyId',
+    //     as: 'responseData',
+    //   }
+    // },
+    // { $unwind: '$responseData' },
+    // {
+    //   $group: {
+    //     _id: {
+    //       name: "$responseData.name",
+    //       email: "$responseData.email",
+    //       question: '$responseData.question',
+    //       report: '$responseData.report',
+    //       surveyId: '$responseData.surveyId'
+    //     },
+
+    //     totalvotes: {
+    //       $sum: {
+    //         $cond: {
+    //           if: {
+    //             $eq: ['$responseData.vote', 'yes']
+    //           },
+    //           then: 1,
+    //           else: 0,
+
+    //         }
+    //       }
+    //     }
+    //   }
+    // },
+    // {
+    //   $group: {
+    //     _id: "null",
+    //     totalvotes: { $sum: '$totalvotes' },
+    //     details: { $push: "$_id" },
+    //   }
+    // }
+
+    //     ]).toArray();
+
+    //   const detailInformatoin = result.length > 0 ? result[0].details : [];
+    //   const totalVotes = result.length > 0 ? result[0].totalVotes : 0
+
+
+    //   response.send({ detailInformatoin, totalVotes });
+    // })
+
+    // app.get('/responseItem', async (request, response) => {
+    //   try {
+    //     const results = await servayCollectoin.aggregate([
+    //       { $unwind: { path: '$_id', preserveNullAndEmptyArrays: true } },
+    //       { $addFields: { testIdString: { $toString: '$_id' } } },
+    //       {
+    //         $lookup: {
+    //           from: 'pollCollectoin',
+    //           localField: 'testIdString',
+    //           foreignField: 'surveyId',
+    //           as: 'responseData',
+    //         }
+    //       },
+    //       { $unwind: '$responseData' },
+    //       {
+    //         $group: {
+    //           // _id: {
+    //           //   name: "$responseData.name",
+    //           //   email: "$responseData.email",
+    //           //   // question: '$responseData.question',
+    //           //   report: '$responseData.report',
+    //           //   surveyId: '$responseData.surveyId'
+    //           // },
+
+    //           totalvotes: {
+    //             $sum: {
+    //               $cond: {
+    //                 if: {
+    //                   $eq: ['$responseData.question', 'yes']
+    //                 },
+    //                 then: 1,
+    //                 else: 0,
+
+    //               }
+    //             }
+    //           }
+    //         }
+    //       },
+    //       {
+    //         $group: {
+    //           _id: "null",
+    //           totalvotes: { $sum: '$totalvotes' },
+    //           details: { $push: "$_id" },
+    //         }
+    //       }
+    //     ]).toArray();
+
+    //     // Process the results to extract information
+    //     const detailInformation = results.length > 0 ? results[0].details : [];
+    //     const totalVotes = results.length > 0 ? results[0].totalVotes : 0;
+
+    //     response.send({ detailInformation, totalVotes });
+
+    //     // Update the servayCollectoin based on the condition
+    //     results.forEach(async (result) => {
+    //       const { surveyId, totalvotes } = result;
+    //       if (totalvotes > 0) {
+    //         await servayCollectoin.updateOne(
+    //           { _id: surveyId }, // Assuming surveyId is the unique identifier
+    //           { $inc: { yesVoted: totalvotes } } // Increment yesVoted by totalvotes
+    //         );
+    //         console.log(`Updated survey with ID ${surveyId}`);
+    //       }
+    //     });
+    //   } catch (error) {
+    //     console.error(`Error in processing /responseItem: ${error}`);
+    //     response.status(500).send({ error: 'Internal server error' });
+    //   }
+    // });
+
+
+
+
+
+
+
+
+
+
+
     app.get('/responseItem', async (request, response) => {
-      const result = await servayCollectoin
-        .aggregate([
-          { $unwind: { path: '$_id', preserveNullAndEmptyArrays: true } },
-          { $addFields: { testIdString: { $toString: '$_id' } } },
-          {
-            $lookup: {
-              from: 'pollCollectoin',
-              localField: 'testIdString',
-              foreignField: 'surveyId',
-              as: 'responseData',
-            }
-          },
-          { $unwind: '$responseData' },
+      try {
+        // Aggregating poll collection for total 'yes' votes per survey
+        const pollResults = await pollCollectoin.aggregate([
           {
             $group: {
-              _id: {
-                name: "$responseData.name",
-                email: "$responseData.email",
-                question: '$responseData.question',
-                report: '$responseData.report',
-                surveyId: '$responseData.surveyId'
-              },
-
-              totalvotes: {
+              _id: '$surveyId',
+              totalVotes: {
                 $sum: {
                   $cond: {
-                    if: {
-                      $eq: ['$responseData.vote', 'yes']
-                    },
+                    if: { $eq: ['$question', 'yes'] },
                     then: 1,
                     else: 0,
-
-                  }
-                }
-              }
-            }
+                  },
+                },
+              },
+            },
           },
-          {
-            $group: {
-              _id: "null",
-              totalvotes: { $sum: '$totalvotes' },
-              details: { $push: "$_id" },
-            }
-          }
-
         ]).toArray();
 
-      const detailInformatoin = result.length > 0 ? result[0].details : [];
-      const totalVotes = result.length > 0 ? result[0].totalVotes : 0
+        // Extracting survey IDs and total votes from poll results
+        const surveyIds = pollResults.map((result) => result._id);
+        const totalVotes = pollResults.reduce((sum, result) => sum + result.totalVotes, 0);
 
+        // Sending the total votes per survey and updating servayCollectoin
+        response.send({ surveyIds, totalVotes });
+        console.log('hello');
+        // Updating servayCollectoin based on the 'yes' votes count
+        // for (const result of pollResults) {
+        //   const { _id: surveyId, totalVotes } = result;
+        //   console.log(_id);
+        //   if (totalVotes > 0) {
+        //     await servayCollectoin.updateOne(
+        //       { _id: new ObjectId(surveyId) },
+        //       { $inc: { yesVoted: 1 } }
+        //     );
+        //     console.log(`Updated survey with ID ${surveyId}`);
+        //   }
 
-      response.send({ detailInformatoin, totalVotes });
-    })
-
-
-
-
+        // }
+      } catch (error) {
+        console.error(`Error in processing /responseItem: ${error}`);
+        response.status(500).send({ error: 'Internal server error' });
+      }
+    });
 
 
     /* agregate for surveyResponse Email  */
 
-    app.get('/surveyorResponse/:email', async (request, response) => {
-      const email = request.params.email;
-      const query = { surveyorEmail: email };
-      const resultTwo = await servayCollectoin
-        .aggregate([
+    // app.get('/surveyorResponse/:email', async (request, response) => {
+    //   const email = request.params.email;
+    //   const query = { surveyorEmail: email };
+    //   const resultTwo = await servayCollectoin
+    //     .aggregate([
 
-          {
-            $match: query,
-          },
-          {
-            $addFields: {
-              covertString: { $toString: '$_id' },
-            },
-          },
-          {
-            $lookup: {
-              from: 'pollCollectoin',
-              localField: 'covertString',
-              foreignField: 'surveyId',
-              as: 'resData',
+    //       {
+    //         $match: query,
+    //       },
+    //       {
+    //         $addFields: {
+    //           covertString: { $toString: '$_id' },
+    //         },
+    //       },
+    //       {
+    //         $lookup: {
+    //           from: 'pollCollectoin',
+    //           localField: 'covertString',
+    //           foreignField: 'surveyId',
+    //           as: 'resData',
 
-            },
-          },
-          {
-            $unwind: { path: '$resData', preserveNullAndEmptyArrays: true },
-          },
+    //         },
+    //       },
+    //       {
+    //         $unwind: { path: '$resData', preserveNullAndEmptyArrays: true },
+    //       },
 
-          {
-            $group: {
-              _id: {
-                surveyId: '$resData.surveyId',
-                name: '$resData.name',
-                email: '$resData.email',
-                timestamp: '$resData.timestamp',
-                totalvotes: {
-                  $sum: {
-                    $cond: {
-                      if: { $eq: ['$resData.vote', 'yes'] },
-                      then: 1,
-                      else: 0,
-                    }
-                  }
-                }
-              }
-            }
-          }, {
-            $group: {
-              _id: '$_id.surveyId',
-              totalVotesPerItem: { $sum: '$totalvotes' },
-              info: { $push: '$_id' },
-            }
-          }
-        ])
+    //       {
+    //         $group: {
+    //           _id: {
+    //             surveyId: '$resData.surveyId',
+    //             name: '$resData.name',
+    //             email: '$resData.email',
+    //             timestamp: '$resData.timestamp',
+    //             totalvotes: {
+    //               $sum: {
+    //                 $cond: {
+    //                   if: { $eq: ['$resData.vote', 'yes'] },
+    //                   then: 1,
+    //                   else: 0,
+    //                 }
+    //               }
+    //             }
+    //           }
+    //         }
+    //       }, {
+    //         $group: {
+    //           _id: '$_id.surveyId',
+    //           totalVotesPerItem: { $sum: '$totalvotes' },
+    //           info: { $push: '$_id' },
+    //         }
+    //       }
+    //     ])
 
-        .toArray();
+    //     .toArray();
 
-      response.status(200).send(resultTwo);
+    //   response.status(200).send(resultTwo);
 
-    });
+    // });
 
 
 

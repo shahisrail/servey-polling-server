@@ -280,8 +280,6 @@ async function run() {
 
     //  servay page  data show
     app.get('/servay', async (req, res) => {
-
-
       const result = await servayCollectoin.find({ status: "Published", }).toArray()
       // const result = await servayCollectoin.find().toArray()
       res.send(result)
@@ -489,10 +487,35 @@ async function run() {
       res.send(result)
 
     })
+    app.get('/commentdata', async (req, res) => {
+      const result = await commentCollection.find().toArray()
+      res.send(result)
 
+    })
+    
 
+    /* spesific servay data  */
+    // 
 
+    // app.get('/servayvoted', async (req, res) => {
+    //   const surveyId = req.body.surveyId;
+    //   const result = await pollCollectoin.find(surveyId).toArray()
+    //   res.send(result)
 
+    // });
+
+   
+    app.get('/servayvoted/:surveyid', async (req, res) => {
+      const surveyId = req.params.surveyid;
+      console.log(JSON.stringify(surveyId));
+      try {
+        // Assuming 'userId' is a field in your pollCollection
+        const result = await pollCollectoin.find({ surveyId: surveyId }).toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
 
 
 
@@ -637,51 +660,60 @@ async function run() {
 
 
 
-    app.get('/responseItem', async (request, response) => {
-      try {
-        // Aggregating poll collection for total 'yes' votes per survey
-        const pollResults = await pollCollectoin.aggregate([
-          {
-            $group: {
-              _id: '$surveyId',
-              totalVotes: {
-                $sum: {
-                  $cond: {
-                    if: { $eq: ['$question', 'yes'] },
-                    then: 1,
-                    else: 0,
-                  },
-                },
-              },
-            },
-          },
-        ]).toArray();
+    // app.get('/responseItem', async (request, response) => {
+    //   try {
+    //     // Aggregating poll collection for total 'yes' votes per survey
+    //     const pollResults = await pollCollectoin.aggregate([
+    //       {
+    //         $group: {
+    //           _id: '$surveyId',
+    //           totalVotes: {
+    //             $sum: {
+    //               $cond: {
+    //                 if: { $eq: ['$question', 'yes'] },
+    //                 then: 1,
+    //                 else: 0,
+    //               },
+    //             },
+    //           },
+    //         },
+    //       },
+    //     ]).toArray();
 
-        // Extracting survey IDs and total votes from poll results
-        const surveyIds = pollResults.map((result) => result._id);
-        const totalVotes = pollResults.reduce((sum, result) => sum + result.totalVotes, 0);
+    //     // Extracting survey IDs and total votes from poll results
+    //     const surveyIds = pollResults.map((result) => result._id);
+    //     const totalVotes = pollResults.reduce((sum, result) => sum + result.totalVotes, 0);
 
-        // Sending the total votes per survey and updating servayCollectoin
-        response.send({ surveyIds, totalVotes });
-        console.log('hello');
-        // Updating servayCollectoin based on the 'yes' votes count
-        // for (const result of pollResults) {
-        //   const { _id: surveyId, totalVotes } = result;
-        //   console.log(_id);
-        //   if (totalVotes > 0) {
-        //     await servayCollectoin.updateOne(
-        //       { _id: new ObjectId(surveyId) },
-        //       { $inc: { yesVoted: 1 } }
-        //     );
-        //     console.log(`Updated survey with ID ${surveyId}`);
-        //   }
+    //     // Sending the total votes per survey and updating servayCollectoin
+    //     response.send({ surveyIds, totalVotes });
+    //     console.log('hello');
+    //     // Updating servayCollectoin based on the 'yes' votes count
+    //     // for (const result of pollResults) {
+    //     //   const { _id: surveyId, totalVotes } = result;
+    //     //   console.log(_id);
+    //     //   if (totalVotes > 0) {
+    //     //     await servayCollectoin.updateOne(
+    //     //       { _id: new ObjectId(surveyId) },
+    //     //       { $inc: { yesVoted: 1 } }
+    //     //     );
+    //     //     console.log(`Updated survey with ID ${surveyId}`);
+    //     //   }
 
-        // }
-      } catch (error) {
-        console.error(`Error in processing /responseItem: ${error}`);
-        response.status(500).send({ error: 'Internal server error' });
-      }
-    });
+    //     // }
+    //   } catch (error) {
+    //     console.error(`Error in processing /responseItem: ${error}`);
+    //     response.status(500).send({ error: 'Internal server error' });
+    //   }
+    // });
+
+
+
+
+
+    // ... (remaining code)
+
+
+
 
 
     /* agregate for surveyResponse Email  */

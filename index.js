@@ -151,6 +151,18 @@ async function run() {
       const result = await userCollectoin.updateOne(filter, updatedDoc)
       res.send(result)
     })
+    // check pro 
+    app.patch('/users/ProUser/:id', verifyToken, async (req, res) => {
+      const id = req.params.id
+      const filter = { _id: new ObjectId(id) }
+      const updatedDoc = {
+        $set: {
+          role: 'ProUser'
+        }
+      }
+      const result = await userCollectoin.updateOne(filter, updatedDoc)
+      res.send(result)
+    })
     // check servay 
     app.patch('/users/Servey/:id', verifyToken, async (req, res) => {
       const id = req.params.id
@@ -177,6 +189,20 @@ async function run() {
         admin = user?.role === 'admin';
       }
       res.send({ admin });
+    })
+    // prouser role check user or normal user 
+    app.get('/users/ProUser/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: 'unauthorized access' })
+      }
+      const query = { email: email };
+      const user = await userCollectoin.findOne(query);
+      let ProUser = false;
+      if (user) {
+        ProUser = user?.role === 'ProUser';
+      }
+      res.send({ ProUser });
     })
     /* servay role check admin or normal user  */
     app.get('/users/Servey/:email', verifyToken, async (req, res) => {
@@ -418,7 +444,7 @@ async function run() {
         const filter = { email: userEmail };
         const updateDoc = {
           $set: {
-            role: 'Pro User'
+            role: 'ProUser'
           }
         };
         const result = await userCollectoin.updateOne(filter, updateDoc);
